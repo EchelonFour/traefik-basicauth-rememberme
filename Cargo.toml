@@ -8,3 +8,5 @@ edition = "2018"
 [dependencies]
 rocket = { version = "0.5.0-rc.1", features = ["secrets"] }
 htpasswd-verify = { git = "https://github.com/mike-kfed/htpasswd-verify", branch = "threadsafe" }
+http-auth-basic = "0.3.1"
+http = "0.2.4"
