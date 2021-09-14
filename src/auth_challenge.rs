@@ -1,7 +1,12 @@
 use http::header::WWW_AUTHENTICATE;
 use rocket::{http::Header, response::content::Html};
 
-const AUTH_RESPONSE_BODY: &str = "<wow></wow>";
+const AUTH_RESPONSE_BODY: &str = r#"<html>
+<head><title>401 Authorization Required</title></head>
+<body>
+<center><h1>401 Authorization Required</h1></center>
+</body>
+</html>"#;
 struct WWWAuthenticate {
   realm: String
 }
