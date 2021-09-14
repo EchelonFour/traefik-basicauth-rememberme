@@ -21,7 +21,8 @@ fn verify_user(user: User, cookies: &CookieJar<'_>) -> User {
 
 
 #[get("/<_..>", rank = 2)]
-fn authenticate() -> AuthChallengeResponse {
+fn authenticate(cookies: &CookieJar<'_>) -> AuthChallengeResponse {
+    cookies.remove(Cookie::named("remembered_user"));
     AuthChallengeResponse::new("Hey, are you cool?".into()) 
 }
 
