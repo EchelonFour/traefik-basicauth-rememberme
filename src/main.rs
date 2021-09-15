@@ -51,11 +51,13 @@ fn authenticate(cookies: &CookieJar<'_>, app_config: &State<AppConfig>) -> AuthC
 
 #[launch]
 fn rocket() -> _ {
-    let data = "user:$apr1$lZL6V/ci$eIMz/iKDkbtys/uU7LEK00";
-    let htpasswd = Htpasswd::new(data);
     let rocket = rocket::build();
     let figment = rocket.figment().clone()
         .join(Serialized::defaults(AppConfig::default()));
+    let htpasswd_path_value = figment.find_value("htpasswd_path").expect("no config value for htpasswd_path");
+    let htpasswd_path = htpasswd_path_value.as_str().expect("config value for htpasswd_path is invalid (not a string)");
+    let htpasswd_contents = std::fs::read_to_string(htpasswd_path).expect("Could not read htpasswd file");
+    let htpasswd = Htpasswd::new(htpasswd_contents);
     rocket
         .configure(figment)
         .attach(rocket::shield::Shield::new())
