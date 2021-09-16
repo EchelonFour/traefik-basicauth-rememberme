@@ -1,67 +1,51 @@
-#[macro_use] extern crate rocket;
-use rocket::figment::providers::Serialized;
-use rocket::http::{Cookie, CookieJar};
-use rocket::State;
-use rocket::fairing::AdHoc;
-use rocket::serde::Deserialize;
-use rocket::serde::Serialize;
-use htpasswd_verify::Htpasswd;
+use std::convert::Infallible;
 
-mod user;
-use user::User;
+use http_auth_basic::Credentials;
+use warp::{Filter, Rejection};
+use cookie::{Cookie, CookieJar};
+use http::header::{AUTHORIZATION, COOKIE};
 
-mod auth_challenge;
-use auth_challenge::AuthChallengeResponse;
-
-#[derive(Debug, Deserialize, Serialize)]
-#[serde(crate = "rocket::serde")]
-struct AppConfig {
-    realm: String,
-    cookie_name: String,
-    htpasswd_path: String,
-    user_header: String,
-}
-impl Default for AppConfig {
-    fn default() -> Self {
-        AppConfig {
-            realm: "Please sign in".to_string(),
-            cookie_name: "_auth_remember_me".to_string(),
-            htpasswd_path: ".htpasswd".to_string(),
-            user_header: "x-user".to_string(),
-        }
+fn cookie_jar() -> impl Filter<Extract = (CookieJar,), Error = Rejection> + Copy {
+  warp::header::optional(COOKIE.as_str()).and_then(|cookie_header: Option<String>| {
+    let mut jar = CookieJar::new();
+    if let Some(cookies_raw) = cookie_header {
+      let cookies = cookies_raw.split(';')
+        .filter_map(|cookie| {
+          let cookie = cookie.to_owned();
+          let mut cookie = cookie.splitn(2, "=");
+          let key = cookie.next()?.trim();
+          let val = cookie.next()?.trim();
+          Some((key.to_owned(), val.to_owned()))
+        });
+      for (cookie_key, cookie_value) in cookies {
+        jar.add_original(cookie::Cookie::new(cookie_key, cookie_value));
+      }
     }
+    std::future::ready(Ok::<_, Infallible>(jar))
+  })
 }
 
-
-#[get("/<_..>", rank = 1)]
-fn verify_user(user: User, cookies: &CookieJar<'_>, app_config: &State<AppConfig>) -> User {
-    if !user.from_cookie {
-        cookies.add_private(Cookie::build(app_config.cookie_name.to_owned(), user.id.to_owned())
-            .permanent()
-            .finish());
-    }
-    user
+fn auth_header() -> impl Filter<Extract = (Option<Credentials>,), Error = Rejection> + Copy {
+  warp::header::optional(AUTHORIZATION.as_str())
+    .and_then(|auth_header: Option<String>| {
+      std::future::ready(match auth_header.map(Credentials::from_header) {
+        Some(parsed_header) => match parsed_header {
+          Ok(good_parsed_header) => Ok::<_, Rejection>(Some(good_parsed_header)),
+          Err(_error) => Ok::<_, Rejection>(None),
+        },
+        None => Ok::<_, Rejection>(None),
+      })
+    })
 }
 
-#[get("/<_..>", rank = 2)]
-fn authenticate(cookies: &CookieJar<'_>, app_config: &State<AppConfig>) -> AuthChallengeResponse {
-    cookies.remove(Cookie::named(app_config.cookie_name.to_owned()));
-    AuthChallengeResponse::new(app_config.realm.to_owned()) 
-}
+#[tokio::main]
+async fn main() {
+    pretty_env_logger::init();
+    let auth_route = auth_header().and(cookie_jar())
+    .map(|auth, cookie: CookieJar| {
+      let actual_cookie = cookie.get("_auth_remember_me");
+      format!("{:#?} : {:#?}", auth, actual_cookie)
+    });
 
-#[launch]
-fn rocket() -> _ {
-    let rocket = rocket::build();
-    let figment = rocket.figment().clone()
-        .join(Serialized::defaults(AppConfig::default()));
-    let htpasswd_path_value = figment.find_value("htpasswd_path").expect("no config value for htpasswd_path");
-    let htpasswd_path = htpasswd_path_value.as_str().expect("config value for htpasswd_path is invalid (not a string)");
-    let htpasswd_contents = std::fs::read_to_string(htpasswd_path).expect("Could not read htpasswd file");
-    let htpasswd = Htpasswd::new(htpasswd_contents);
-    rocket
-        .configure(figment)
-        .attach(rocket::shield::Shield::new())
-        .attach(AdHoc::config::<AppConfig>())
-        .manage(htpasswd)
-        .mount("/", routes![verify_user, authenticate])
+    warp::serve(auth_route).run(([0, 0, 0, 0], 3030)).await;
 }
