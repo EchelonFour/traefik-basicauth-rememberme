@@ -1,10 +1,11 @@
-use std::convert::Infallible;
+use std::{convert::Infallible, sync::Arc};
 use std::error::Error;
 use http_auth_basic::Credentials;
 use tracing::info;
 use warp::{Filter, Rejection};
 use cookie::{Cookie, CookieJar};
 use http::header::{AUTHORIZATION, COOKIE};
+use htpasswd_verify::Htpasswd;
 
 mod config;
 use crate::config::AppConfig;
@@ -29,15 +30,29 @@ fn cookie_jar() -> impl Filter<Extract = (CookieJar,), Error = Rejection> + Copy
   })
 }
 
-fn auth_header() -> impl Filter<Extract = (Option<Credentials>,), Error = Rejection> + Copy {
-  warp::header::optional(AUTHORIZATION.as_str())
-    .and_then(|auth_header: Option<String>| {
-      std::future::ready(match auth_header.map(Credentials::from_header) {
-        Some(parsed_header) => match parsed_header {
-          Ok(good_parsed_header) => Ok::<_, Rejection>(Some(good_parsed_header)),
-          Err(_error) => Ok::<_, Rejection>(None),
-        },
-        None => Ok::<_, Rejection>(None),
+fn auth_header_exists() -> impl Filter<Extract = (Credentials,), Error = Rejection> + Copy {
+  warp::header::header(AUTHORIZATION.as_str())
+    .and_then(|auth_header: String| {
+      std::future::ready(Credentials::from_header(auth_header)
+        .map_err(|auth_error| {
+          info!("Invalid authorization header, ignoring. {}", error = auth_error);
+          warp::reject::not_found()
+        })
+      )
+    })
+}
+#[derive(Debug)]
+struct InvalidUser;
+
+impl warp::reject::Reject for InvalidUser {}
+
+fn auth_header_valid(htpasswd: Arc<Htpasswd>) -> impl Filter<Extract = (String,), Error = Rejection> + Clone {
+  auth_header_exists().and(warp::any().map(move || htpasswd.clone()))
+    .and_then(|credentials: Credentials, pass: Arc<Htpasswd>| {
+      std::future::ready(if pass.check(&credentials.user_id, &credentials.password) {
+        Ok(credentials.user_id)
+      } else {
+        Err(warp::reject::custom(InvalidUser))
       })
     })
 }
@@ -55,7 +70,9 @@ async fn main() {
         .expect("Could not set up log filter correctly"))
       .init();
     let config = AppConfig::new().expect("Could not load config");
-    let auth_route = auth_header().and(cookie_jar())
+    let htpasswd_contents = std::fs::read_to_string(config.htpasswd_path).expect("Could not read htpasswd file");
+    let htpasswd = Arc::new(Htpasswd::new(htpasswd_contents));
+    let auth_route = auth_header_valid(htpasswd).and(cookie_jar())
     .map(|auth, cookie: CookieJar| {
       let actual_cookie = cookie.get("_auth_remember_me");
       format!("{:#?} : {:#?}", auth, actual_cookie)
