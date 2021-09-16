@@ -1,5 +1,7 @@
 use std::convert::Infallible;
+use std::error::Error;
 use http_auth_basic::Credentials;
+use tracing::info;
 use warp::{Filter, Rejection};
 use cookie::{Cookie, CookieJar};
 use http::header::{AUTHORIZATION, COOKIE};
@@ -42,7 +44,16 @@ fn auth_header() -> impl Filter<Extract = (Option<Credentials>,), Error = Reject
 
 #[tokio::main]
 async fn main() {
-    pretty_env_logger::init();
+    tracing_subscriber::fmt::fmt()
+      .with_env_filter(tracing_subscriber::EnvFilter::try_from_default_env()
+        .or_else(|error| {
+          if Some(&std::env::VarError::NotPresent) != error.source().unwrap().downcast_ref::<std::env::VarError>() {
+            println!("Could not parse log options, defaulting ({})", error);
+          }
+          tracing_subscriber::EnvFilter::try_new("info")
+        })
+        .expect("Could not set up log filter correctly"))
+      .init();
     let config = AppConfig::new().expect("Could not load config");
     let auth_route = auth_header().and(cookie_jar())
     .map(|auth, cookie: CookieJar| {
@@ -50,5 +61,5 @@ async fn main() {
       format!("{:#?} : {:#?}", auth, actual_cookie)
     });
 
-    warp::serve(auth_route).run(config.listen).await;
+    warp::serve(auth_route.with(warp::log("auth"))).run(config.listen).await;
 }
