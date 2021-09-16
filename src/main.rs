@@ -1,9 +1,11 @@
 use std::convert::Infallible;
-
 use http_auth_basic::Credentials;
 use warp::{Filter, Rejection};
 use cookie::{Cookie, CookieJar};
 use http::header::{AUTHORIZATION, COOKIE};
+
+mod config;
+use crate::config::AppConfig;
 
 fn cookie_jar() -> impl Filter<Extract = (CookieJar,), Error = Rejection> + Copy {
   warp::header::optional(COOKIE.as_str()).and_then(|cookie_header: Option<String>| {
@@ -18,7 +20,7 @@ fn cookie_jar() -> impl Filter<Extract = (CookieJar,), Error = Rejection> + Copy
           Some((key.to_owned(), val.to_owned()))
         });
       for (cookie_key, cookie_value) in cookies {
-        jar.add_original(cookie::Cookie::new(cookie_key, cookie_value));
+        jar.add_original(Cookie::new(cookie_key, cookie_value));
       }
     }
     std::future::ready(Ok::<_, Infallible>(jar))
@@ -41,11 +43,12 @@ fn auth_header() -> impl Filter<Extract = (Option<Credentials>,), Error = Reject
 #[tokio::main]
 async fn main() {
     pretty_env_logger::init();
+    let config = AppConfig::new().expect("Could not load config");
     let auth_route = auth_header().and(cookie_jar())
     .map(|auth, cookie: CookieJar| {
       let actual_cookie = cookie.get("_auth_remember_me");
       format!("{:#?} : {:#?}", auth, actual_cookie)
     });
 
-    warp::serve(auth_route).run(([0, 0, 0, 0], 3030)).await;
+    warp::serve(auth_route).run(config.listen).await;
 }
