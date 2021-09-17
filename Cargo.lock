@@ -1686,6 +1686,7 @@ dependencies = [
  "htpasswd-verify",
  "http",
  "http-auth-basic",
+ "lazy_static",
  "serde",
  "tokio",
  "tracing",

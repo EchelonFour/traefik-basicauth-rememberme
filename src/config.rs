@@ -2,8 +2,11 @@ use std::{env, net::SocketAddr};
 use config::{ConfigError, Config, File, Environment};
 use cookie::Key;
 use serde::Deserialize;
-use derivative::Derivative;
 use tracing::warn;
+
+lazy_static! {
+    pub static ref CONFIG: AppConfig = AppConfig::new().expect("Could not load config");
+}
 
 #[derive(Derivative)]
 #[derivative(Debug)]

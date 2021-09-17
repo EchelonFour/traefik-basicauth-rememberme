@@ -1,3 +1,9 @@
+#[macro_use]
+extern crate lazy_static;
+
+#[macro_use]
+extern crate derivative;
+
 use cookie::{Cookie, CookieJar};
 use htpasswd_verify::Htpasswd;
 use http::header::{AUTHORIZATION, COOKIE};
@@ -8,7 +14,7 @@ use tracing::info;
 use warp::{Filter, Rejection};
 
 mod config;
-use crate::config::AppConfig;
+pub use crate::config::CONFIG;
 
 fn cookie_jar() -> impl Filter<Extract = (CookieJar,), Error = Rejection> + Copy {
     warp::header::optional(COOKIE.as_str()).and_then(|cookie_header: Option<String>| {
@@ -79,8 +85,7 @@ fn setup_logging() {
 #[tokio::main]
 async fn main() {
     setup_logging();
-    let config = Arc::new(AppConfig::new().expect("Could not load config"));
-    let htpasswd_contents = std::fs::read_to_string(config.htpasswd_path.clone())
+    let htpasswd_contents = std::fs::read_to_string(&CONFIG.htpasswd_path)
         .expect("Could not read htpasswd file");
     let htpasswd = Arc::new(Htpasswd::new(htpasswd_contents));
     let auth_route =
@@ -92,6 +97,6 @@ async fn main() {
             });
 
     warp::serve(auth_route.with(warp::trace::request()))
-        .run(config.listen)
+        .run(CONFIG.listen)
         .await;
 }

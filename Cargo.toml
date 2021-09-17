@@ -18,3 +18,4 @@ config = { version = "0.11", default-features = false, features = ["toml", "json
 serde = { version = "1.0.130", features = ["derive"] }
 derivative = "2.2"
 base64 = "0.13"
+lazy_static = "1.4"
