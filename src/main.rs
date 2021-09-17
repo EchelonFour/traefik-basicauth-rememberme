@@ -57,20 +57,24 @@ fn auth_header_valid(htpasswd: Arc<Htpasswd>) -> impl Filter<Extract = (String,)
     })
 }
 
+fn setup_logging() {
+  tracing_subscriber::fmt::fmt()
+  .with_env_filter(tracing_subscriber::EnvFilter::try_from_default_env()
+    .or_else(|error| {
+      if Some(&std::env::VarError::NotPresent) != error.source().unwrap().downcast_ref::<std::env::VarError>() {
+        println!("Could not parse log options, defaulting ({})", error);
+      }
+      tracing_subscriber::EnvFilter::try_new("info")
+    })
+    .expect("Could not set up log filter correctly"))
+  .init();
+}
+
 #[tokio::main]
 async fn main() {
-    tracing_subscriber::fmt::fmt()
-      .with_env_filter(tracing_subscriber::EnvFilter::try_from_default_env()
-        .or_else(|error| {
-          if Some(&std::env::VarError::NotPresent) != error.source().unwrap().downcast_ref::<std::env::VarError>() {
-            println!("Could not parse log options, defaulting ({})", error);
-          }
-          tracing_subscriber::EnvFilter::try_new("info")
-        })
-        .expect("Could not set up log filter correctly"))
-      .init();
-    let config = AppConfig::new().expect("Could not load config");
-    let htpasswd_contents = std::fs::read_to_string(config.htpasswd_path).expect("Could not read htpasswd file");
+    setup_logging();
+    let config = Arc::new(AppConfig::new().expect("Could not load config"));
+    let htpasswd_contents = std::fs::read_to_string(config.htpasswd_path.clone()).expect("Could not read htpasswd file");
     let htpasswd = Arc::new(Htpasswd::new(htpasswd_contents));
     let auth_route = auth_header_valid(htpasswd).and(cookie_jar())
     .map(|auth, cookie: CookieJar| {
