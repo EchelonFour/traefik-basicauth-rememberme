@@ -78,5 +78,5 @@ async fn main() {
       format!("{:#?} : {:#?}", auth, actual_cookie)
     });
 
-    warp::serve(auth_route.with(warp::log("auth"))).run(config.listen).await;
+    warp::serve(auth_route.with(warp::trace::request())).run(config.listen).await;
 }
