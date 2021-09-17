@@ -16,7 +16,7 @@ fn cookie_jar() -> impl Filter<Extract = (CookieJar,), Error = Rejection> + Copy
         if let Some(cookies_raw) = cookie_header {
             let cookies = cookies_raw.split(';').filter_map(|cookie| {
                 let cookie = cookie.to_owned();
-                let mut cookie = cookie.splitn(2, "=");
+                let mut cookie = cookie.splitn(2, '=');
                 let key = cookie.next()?.trim();
                 let val = cookie.next()?.trim();
                 Some((key.to_owned(), val.to_owned()))
