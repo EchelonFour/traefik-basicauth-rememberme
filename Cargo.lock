@@ -605,6 +605,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6456b8a6c8f33fee7d958fcd1b60d55b11940a79e63ae87013e6d22e26034440"
 
 [[package]]
+name = "humantime"
+version = "2.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9a3a5bfb195931eeb336b2a7b4d761daec841b97f947d34394601737a7bba5e4"
+
+[[package]]
 name = "hyper"
 version = "0.14.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1470,6 +1476,7 @@ checksum = "4752a97f8eebd6854ff91f1c1824cd6160626ac4bd44287f7f4ea2035a02a242"
 dependencies = [
  "const_fn",
  "libc",
+ "serde",
  "standback",
  "stdweb",
  "time-macros",
@@ -1686,8 +1693,10 @@ dependencies = [
  "htpasswd-verify",
  "http",
  "http-auth-basic",
+ "humantime",
  "lazy_static",
  "serde",
+ "time 0.2.27",
  "tokio",
  "tracing",
  "tracing-subscriber",

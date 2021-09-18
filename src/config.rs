@@ -2,7 +2,7 @@ use config::{Config, ConfigError, Environment, File};
 use cookie::Key;
 use htpasswd_verify::Htpasswd;
 use serde::Deserialize;
-use std::{env, net::SocketAddr};
+use std::{convert::TryInto, env, net::SocketAddr};
 use tracing::warn;
 
 lazy_static! {
@@ -17,6 +17,13 @@ pub struct Secret {
     default: bool,
 }
 
+#[derive(Debug)]
+pub enum CookieLifetime {
+    Permanent,
+    Limited(time::Duration),
+    Session,
+}
+
 #[derive(Derivative, Deserialize)]
 #[derivative(Debug)]
 #[serde(default)]
@@ -24,6 +31,7 @@ pub struct AppConfig {
     pub realm: String,
     pub cookie_name: String,
     pub cookie_domain: Option<String>,
+    pub cookie_lifetime: CookieLifetime,
     pub htpasswd_path: String,
     pub user_header: String,
     pub listen: SocketAddr,
@@ -40,6 +48,7 @@ impl Default for AppConfig {
             realm: "Please sign in".to_string(),
             cookie_name: "_auth_remember_me".to_string(),
             cookie_domain: None,
+            cookie_lifetime: CookieLifetime::Permanent,
             htpasswd_path: ".htpasswd".to_string(),
             user_header: "x-user".to_string(),
             listen: ([0, 0, 0, 0], 8000).into(),
@@ -75,8 +84,9 @@ impl AppConfig {
             if let Some(htpasswd_contents) = &parsed_config.htpasswd_contents {
                 htpasswd_contents.to_owned()
             } else {
-                std::fs::read_to_string(&parsed_config.htpasswd_path)
-                    .expect("Could not read htpasswd file")
+                std::fs::read_to_string(&parsed_config.htpasswd_path).map_err(|io_error| {
+                    ConfigError::Message(format!("failed to read htpasswd file {}", io_error))
+                })?
             },
         );
         Ok(parsed_config)
@@ -99,6 +109,32 @@ impl<'de> Deserialize<'de> for Secret {
         Ok(Secret {
             key: Key::derive_from(&secret_bytes),
             default: false,
+        })
+    }
+}
+impl<'de> Deserialize<'de> for CookieLifetime {
+    fn deserialize<D: serde::de::Deserializer<'de>>(de: D) -> Result<Self, D::Error> {
+        let value = String::deserialize(de)?.to_lowercase();
+
+        Ok(match value.as_str() {
+            "permanent" => CookieLifetime::Permanent,
+            "session" => CookieLifetime::Session,
+            limited => CookieLifetime::Limited(
+                humantime::parse_duration(limited)
+                    .map_err(|error| {
+                        serde::de::Error::custom(format!(
+                            "failed to parse limited duration {}",
+                            error
+                        ))
+                    })?
+                    .try_into()
+                    .map_err(|error| {
+                        serde::de::Error::custom(format!(
+                            "failed to parse limited duration {}",
+                            error
+                        ))
+                    })?,
+            ),
         })
     }
 }

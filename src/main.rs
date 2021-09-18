@@ -14,7 +14,10 @@ use warp::http::Response;
 use warp::{Filter, Rejection};
 
 mod config;
+use crate::config::CookieLifetime;
 pub use crate::config::CONFIG;
+
+mod auth_challenge;
 
 fn cookie_jar() -> impl Filter<Extract = (CookieJar,), Error = Rejection> + Copy {
     warp::header::optional(COOKIE.as_str()).and_then(|cookie_header: Option<String>| async {
@@ -85,7 +88,12 @@ fn setup_logging() {
 }
 
 fn make_auth_cookie<'c, V: Into<Cow<'c, str>>>(value: V) -> Cookie<'c> {
-    let mut builder = Cookie::build(CONFIG.cookie_name.to_owned(), value).permanent();
+    let mut builder = Cookie::build(CONFIG.cookie_name.to_owned(), value);
+    builder = match &CONFIG.cookie_lifetime {
+        CookieLifetime::Permanent => builder.permanent(),
+        CookieLifetime::Session => builder.expires(cookie::Expiration::Session),
+        CookieLifetime::Limited(duration) => builder.max_age(duration.to_owned()),
+    };
     if let Some(cookie_domain) = &CONFIG.cookie_domain {
         builder = builder.domain(cookie_domain.to_owned());
     }
@@ -115,8 +123,26 @@ async fn main() {
                 }
                 response.body("")
             });
+    let unauthorised = cookie_jar().map(|mut jar: CookieJar| {
+        if None != jar.get(&CONFIG.cookie_name) {
+            jar.remove(make_auth_cookie(""));
+        }
+        auth_challenge::make_challenge_response(Some(jar.delta()))
+    });
 
-    warp::serve(cookie_route.or(auth_route).with(warp::trace::request()))
-        .run(CONFIG.listen)
-        .await;
+    warp::serve(
+        cookie_route
+            .or(auth_route)
+            .or(unauthorised)
+            .recover(|error| async move {
+                Ok::<_, Infallible>(warp::reply::with_header(
+                    auth_challenge::make_challenge_response(None),
+                    "x-error-message",
+                    format!("{:?}", error),
+                ))
+            })
+            .with(warp::trace::request()),
+    )
+    .run(CONFIG.listen)
+    .await;
 }
