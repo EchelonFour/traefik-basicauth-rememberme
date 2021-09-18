@@ -12,7 +12,7 @@ lazy_static! {
 #[derivative(Debug)]
 pub struct Secret {
     #[derivative(Debug="ignore")]
-    pub inner: Key,
+    pub key: Key,
     default: bool,
 }
 
@@ -35,7 +35,7 @@ impl Default for AppConfig {
             htpasswd_path: ".htpasswd".to_string(),
             user_header: "x-user".to_string(),
             listen: ([0, 0, 0, 0], 8000).into(),
-            secret: Secret { inner: cookie::Key::generate(), default: true },
+            secret: Secret { key: cookie::Key::generate(), default: true },
         }
     }
 }
@@ -71,7 +71,7 @@ impl<'de> Deserialize<'de> for Secret {
             return Err(serde::de::Error::invalid_length(secret_bytes.len(), &"more than 32 bytes"));
         }
         Ok(Secret {
-            inner: Key::derive_from(&secret_bytes),
+            key: Key::derive_from(&secret_bytes),
             default: false,
         })
     }
