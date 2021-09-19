@@ -5,12 +5,11 @@ extern crate lazy_static;
 extern crate derivative;
 
 use cookie::{Cookie, CookieJar};
-use http::header::{AUTHORIZATION, COOKIE, SET_COOKIE};
+use http::header::{AUTHORIZATION, COOKIE};
 use http_auth_basic::Credentials;
 use std::convert::Infallible;
 use std::{borrow::Cow, error::Error};
 use tracing::info;
-use warp::http::Response;
 use warp::{Filter, Rejection};
 
 mod config;
@@ -31,12 +30,12 @@ fn cookie_jar() -> impl Filter<Extract = (CookieJar,), Error = Rejection> + Copy
         Ok::<_, Infallible>(jar)
     })
 }
-fn valid_cookie() -> impl Filter<Extract = (String,), Error = Rejection> + Copy {
+fn valid_cookie() -> impl Filter<Extract = (Credentials,), Error = Rejection> + Copy {
     cookie_jar().and_then(|jar: CookieJar| async move {
         let private_jar = jar.private(&CONFIG.secret.key);
         jar.get(&CONFIG.cookie_name)
             .and_then(|cookie| private_jar.decrypt(cookie.clone()))
-            .map(|cookie| cookie.value().to_string())
+            .and_then(make_credentials_from_cookie)
             .ok_or_else(warp::reject::not_found)
     })
 }
@@ -52,22 +51,16 @@ fn auth_header_exists() -> impl Filter<Extract = (Credentials,), Error = Rejecti
         })
     })
 }
-#[derive(Debug)]
-struct InvalidUser;
 
-impl warp::reject::Reject for InvalidUser {}
-
-fn auth_header_valid() -> impl Filter<Extract = (String,), Error = Rejection> + Copy {
-    auth_header_exists().and_then(|credentials: Credentials| async move {
-        if CONFIG
-            .htpasswd
-            .check(&credentials.user_id, &credentials.password)
-        {
-            Ok(credentials.user_id)
-        } else {
-            Err(warp::reject::custom(InvalidUser))
-        }
-    })
+async fn validate_credentials(credentials: Credentials) -> Result<Credentials, Rejection> {
+    if CONFIG
+        .htpasswd
+        .check(&credentials.user_id, &credentials.password)
+    {
+        Ok(credentials)
+    } else {
+        Err(warp::reject::not_found())
+    }
 }
 
 fn setup_logging() {
@@ -100,29 +93,34 @@ fn make_auth_cookie<'c, V: Into<Cow<'c, str>>>(value: V) -> Cookie<'c> {
     builder.finish()
 }
 
+fn make_auth_cookie_from_credentials<'c>(credentials: Credentials) -> Cookie<'c> {
+    make_auth_cookie(format!("{}:{}", credentials.user_id, credentials.password))
+}
+
+fn make_credentials_from_cookie(cookie: Cookie<'_>) -> Option<Credentials> {
+    let mut split_cookie = cookie.value().splitn(2, ':');
+    let user_id = split_cookie.next()?;
+    let password = split_cookie.next()?;
+    Some(Credentials::new(user_id, password))
+}
+
 #[tokio::main]
 async fn main() {
     setup_logging();
 
-    let cookie_route = valid_cookie().map(|user| {
-        Response::builder()
-            .header(CONFIG.user_header.as_str(), user)
-            .body("")
-    });
-    let auth_route =
-        auth_header_valid()
-            .and(cookie_jar())
-            .map(|auth: String, mut jar: CookieJar| {
-                let mut private_jar = jar.private_mut(&CONFIG.secret.key);
-                let cookie = make_auth_cookie(auth.to_owned());
-                private_jar.add(cookie);
-
-                let mut response = Response::builder().header(CONFIG.user_header.as_str(), auth);
-                for set_cookie in jar.delta() {
-                    response = response.header(SET_COOKIE, set_cookie.to_string());
-                }
-                response.body("")
-            });
+    let cookie_route = valid_cookie()
+        .and_then(validate_credentials)
+        .map(|auth: Credentials| auth_challenge::make_valid_response(&auth.user_id, None));
+    let auth_route = auth_header_exists()
+        .and_then(validate_credentials)
+        .and(cookie_jar())
+        .map(|auth: Credentials, mut jar: CookieJar| {
+            let mut private_jar = jar.private_mut(&CONFIG.secret.key);
+            let user_id = auth.user_id.to_owned();
+            let cookie = make_auth_cookie_from_credentials(auth);
+            private_jar.add(cookie);
+            auth_challenge::make_valid_response(&user_id, Some(jar.delta()))
+        });
     let unauthorised = cookie_jar().map(|mut jar: CookieJar| {
         if None != jar.get(&CONFIG.cookie_name) {
             jar.remove(make_auth_cookie(""));
