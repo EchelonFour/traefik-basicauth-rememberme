@@ -16,7 +16,7 @@ mod config;
 use crate::config::CookieLifetime;
 pub use crate::config::CONFIG;
 
-mod auth_challenge;
+mod response;
 
 fn cookie_jar() -> impl Filter<Extract = (CookieJar,), Error = Rejection> + Copy {
     warp::header::optional(COOKIE.as_str()).and_then(|cookie_header: Option<String>| async {
@@ -110,7 +110,7 @@ async fn main() {
 
     let cookie_route = valid_cookie()
         .and_then(validate_credentials)
-        .map(|auth: Credentials| auth_challenge::make_valid_response(&auth.user_id, None));
+        .map(|auth: Credentials| response::make_valid_response(&auth.user_id, None));
     let auth_route = auth_header_exists()
         .and_then(validate_credentials)
         .and(cookie_jar())
@@ -119,13 +119,13 @@ async fn main() {
             let user_id = auth.user_id.to_owned();
             let cookie = make_auth_cookie_from_credentials(auth);
             private_jar.add(cookie);
-            auth_challenge::make_valid_response(&user_id, Some(jar.delta()))
+            response::make_valid_response(&user_id, Some(jar.delta()))
         });
     let unauthorised = cookie_jar().map(|mut jar: CookieJar| {
         if None != jar.get(&CONFIG.cookie_name) {
             jar.remove(make_auth_cookie(""));
         }
-        auth_challenge::make_challenge_response(Some(jar.delta()))
+        response::make_challenge_response(Some(jar.delta()))
     });
 
     warp::serve(
@@ -134,7 +134,7 @@ async fn main() {
             .or(unauthorised)
             .recover(|error| async move {
                 Ok::<_, Infallible>(warp::reply::with_header(
-                    auth_challenge::make_challenge_response(None),
+                    response::make_challenge_response(None),
                     "x-error-message",
                     format!("{:?}", error),
                 ))

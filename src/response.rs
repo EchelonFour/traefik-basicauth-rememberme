@@ -1,5 +1,9 @@
 use crate::CONFIG;
-use http::{StatusCode, header::{SET_COOKIE, WWW_AUTHENTICATE}, response::Builder};
+use http::{
+    header::{SET_COOKIE, WWW_AUTHENTICATE},
+    response::Builder,
+    StatusCode,
+};
 use warp::http::{Response, Result};
 
 const AUTH_RESPONSE_BODY: &str = r#"<html>
@@ -9,9 +13,11 @@ const AUTH_RESPONSE_BODY: &str = r#"<html>
 </body>
 </html>"#;
 
-pub fn make_valid_response(user_id: &str, cookies: Option<cookie::Delta>) -> Result<Response<&'static str>> {
-    let mut response = Response::builder()
-        .header(CONFIG.user_header.as_str(), user_id);
+pub fn make_valid_response(
+    user_id: &str,
+    cookies: Option<cookie::Delta>,
+) -> Result<Response<&'static str>> {
+    let mut response = Response::builder().header(CONFIG.user_header.as_str(), user_id);
     response = add_cookies(response, cookies);
     response.body("")
 }
