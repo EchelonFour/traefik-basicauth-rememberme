@@ -1,8 +1,7 @@
+use crate::cookie::make_auth_cookie;
 use cookie::Cookie;
 use http_auth_basic::Credentials;
 use std::convert::TryFrom;
-
-use crate::make_auth_cookie;
 
 pub struct User {
     pub user_id: String,

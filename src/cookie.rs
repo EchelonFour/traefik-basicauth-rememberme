@@ -1,11 +1,10 @@
+use crate::config::CookieLifetime;
+use crate::CONFIG;
 pub use cookie::{Cookie, Delta, PrivateJar};
 use http::header::COOKIE;
 use std::borrow::Cow;
 use std::convert::Infallible;
 use warp::{Filter, Rejection};
-
-use crate::config::CookieLifetime;
-use crate::CONFIG;
 
 pub struct CookieJar(cookie::CookieJar);
 

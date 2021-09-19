@@ -4,35 +4,19 @@ extern crate lazy_static;
 #[macro_use]
 extern crate derivative;
 
-use crate::cookie::{Cookie, CookieJar, cookie_jar, has_decrypted_cookie, make_auth_cookie};
-use http::header::{AUTHORIZATION};
-use http_auth_basic::Credentials;
-use std::convert::{Infallible, TryInto};
-use std::error::Error;
-use tracing::info;
-use user::User;
-use warp::{Filter, Rejection};
-
+mod authentication;
 mod config;
-pub use crate::config::CONFIG;
-
 mod cookie;
 mod response;
 mod user;
 
-fn auth_header_exists() -> impl Filter<Extract = (User,), Error = Rejection> + Copy {
-    warp::header::header(AUTHORIZATION.as_str()).and_then(|auth_header: String| async {
-        Credentials::from_header(auth_header)
-            .map(|creds| creds.into())
-            .map_err(|auth_error| {
-                info!(
-                    "Invalid authorization header, ignoring. {}",
-                    error = auth_error
-                );
-                warp::reject::not_found()
-            })
-    })
-}
+pub use crate::config::CONFIG;
+use crate::cookie::{cookie_jar, has_decrypted_cookie, make_auth_cookie, Cookie, CookieJar};
+use authentication::auth_header_exists;
+use std::convert::{Infallible, TryInto};
+use std::error::Error;
+use user::User;
+use warp::{Filter, Rejection};
 
 async fn validate_credentials(credentials: User) -> Result<User, Rejection> {
     if CONFIG
