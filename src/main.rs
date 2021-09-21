@@ -15,6 +15,7 @@ use crate::cookie::{cookie_jar, has_decrypted_cookie, make_auth_cookie, Cookie, 
 use authentication::auth_header_exists;
 use std::convert::{Infallible, TryInto};
 use std::error::Error;
+use tracing::error;
 use user::User;
 use warp::{Filter, Rejection};
 
@@ -54,15 +55,14 @@ async fn main() {
             std::future::ready(cookie.try_into().map_err(|_| warp::reject::not_found()))
         })
         .and_then(validate_credentials)
-        .map(|user: User| response::make_valid_response(&user.user_id, None));
-    let auth_route = auth_header_exists()
-        .and_then(validate_credentials)
+        .map(|user: User| response::make_valid_response(&user.user_id));
+    let auth_route = warp::header::<String>("X-Forwarded-Uri")
+        .and(auth_header_exists().and_then(validate_credentials))
         .and(cookie_jar())
-        .map(|user: User, mut jar: CookieJar| {
+        .map(|original_url: String, user: User, mut jar: CookieJar| {
             let mut private_jar = jar.private_mut();
-            let user_id = user.user_id.to_owned();
             private_jar.add(user.into());
-            response::make_valid_response(&user_id, Some(jar.delta()))
+            response::make_cookie_response(&original_url, jar.delta())
         });
     let unauthorised = cookie_jar().map(|mut jar: CookieJar| {
         if None != jar.get(&CONFIG.cookie_name) {
@@ -76,6 +76,7 @@ async fn main() {
             .or(auth_route)
             .or(unauthorised)
             .recover(|error| async move {
+                error!("Issue validating user. {:?}", error);
                 Ok::<_, Infallible>(warp::reply::with_header(
                     response::make_challenge_response(None),
                     "x-error-message",
