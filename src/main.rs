@@ -40,7 +40,7 @@ fn setup_logging() {
                     {
                         println!("Could not parse log options, defaulting ({})", error);
                     }
-                    tracing_subscriber::EnvFilter::try_new("info")
+                    tracing_subscriber::EnvFilter::try_new("warn")
                 })
                 .expect("Could not set up log filter correctly"),
         )
