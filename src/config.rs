@@ -82,10 +82,10 @@ impl AppConfig {
         }
         parsed_config.htpasswd = Htpasswd::new(
             if let Some(htpasswd_contents) = &parsed_config.htpasswd_contents {
-                htpasswd_contents.to_owned()
+                htpasswd_contents.to_owned().replace(",", "\n")
             } else {
                 std::fs::read_to_string(&parsed_config.htpasswd_path).map_err(|io_error| {
-                    ConfigError::Message(format!("failed to read htpasswd file {}", io_error))
+                    ConfigError::Message(format!("failed to read htpasswd file {}. {}", &parsed_config.htpasswd_path, io_error))
                 })?
             },
         );
