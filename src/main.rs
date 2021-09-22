@@ -83,7 +83,29 @@ async fn main() {
                     format!("{:?}", error),
                 ))
             })
-            .with(warp::trace::request()),
+            .with(warp::trace(|info| {
+                use tracing::field::{display, Empty};
+                let span = tracing::info_span!(
+                    "request",
+                    remote.addr = Empty,
+                    method = %info.method(),
+                    path = %info.path(),
+                    version = ?info.version(),
+                    referer = Empty,
+                );
+        
+                // Record optional fields.
+                if let Some(remote_addr) = info.remote_addr() {
+                    span.record("remote.addr", &display(remote_addr));
+                }
+        
+                if let Some(referer) = info.referer() {
+                    span.record("referer", &display(referer));
+                }
+                tracing::debug!(parent: &span, "received request");
+                tracing::debug!(parent: &span, headers = ?info.request_headers(), "headers");
+                span
+            })),
     )
     .run(CONFIG.listen)
     .await;
