@@ -56,6 +56,12 @@ fn get_original_request_url()  -> impl Filter<Extract = (String,), Error = Rejec
             std::future::ready(Ok::<_, Rejection>(format!("{}://{}:{}{}", proto, host, port, uri)))
         })
 }
+fn is_secure_request()  -> impl Filter<Extract = (bool,), Error = Rejection> + Copy {
+    warp::header("x-forwarded-proto")
+        .and_then(|proto: String| {
+            std::future::ready(Ok::<_, Rejection>(proto == "https"))
+        })
+}
 #[tokio::main]
 async fn main() {
     setup_logging();
@@ -68,14 +74,17 @@ async fn main() {
     let auth_route = get_original_request_url()
         .and(auth_header_exists().and_then(validate_credentials))
         .and(cookie_jar())
-        .map(|original_url: String, user: User, mut jar: CookieJar| {
+        .and(is_secure_request())
+        .map(|original_url: String, user: User, mut jar: CookieJar, is_secure: bool| {
             let mut private_jar = jar.private_mut();
-            private_jar.add(user.into());
+            let mut cookie: Cookie = user.into();
+            cookie.set_secure(is_secure);
+            private_jar.add(cookie);
             response::make_cookie_response(&original_url, jar.delta())
         });
-    let unauthorised = cookie_jar().map(|mut jar: CookieJar| {
+    let unauthorised = cookie_jar().and(is_secure_request()).map(|mut jar: CookieJar, is_secure: bool| {
         if None != jar.get(&CONFIG.cookie_name) {
-            jar.remove(make_auth_cookie(""));
+            jar.remove(make_auth_cookie("", is_secure));
         }
         response::make_challenge_response(Some(jar.delta()))
     });

@@ -53,8 +53,10 @@ pub fn has_decrypted_cookie(
     })
 }
 
-pub fn make_auth_cookie<'c, V: Into<Cow<'c, str>>>(value: V) -> Cookie<'c> {
-    let mut builder = Cookie::build(CONFIG.cookie_name.to_owned(), value);
+pub fn make_auth_cookie<'c, V: Into<Cow<'c, str>>>(value: V, is_secure: bool) -> Cookie<'c> {
+    let mut builder = Cookie::build(CONFIG.cookie_name.to_owned(), value)
+        .http_only(true)
+        .secure(is_secure);
     builder = match &CONFIG.cookie_lifetime {
         CookieLifetime::Permanent => builder.permanent(),
         CookieLifetime::Session => builder.expires(cookie::Expiration::Session),

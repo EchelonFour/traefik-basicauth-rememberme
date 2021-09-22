@@ -23,7 +23,7 @@ impl<'c> TryFrom<Cookie<'c>> for User {
 
 impl<'c> From<User> for Cookie<'c> {
     fn from(user: User) -> Self {
-        make_auth_cookie(format!("{}:{}", user.user_id, user.password))
+        make_auth_cookie(format!("{}:{}", user.user_id, user.password), false)
     }
 }
 
