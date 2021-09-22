@@ -47,6 +47,15 @@ fn setup_logging() {
         .init();
 }
 
+fn get_original_request_url()  -> impl Filter<Extract = (String,), Error = Rejection> + Copy {
+    warp::header("x-forwarded-proto")
+        .and(warp::header("x-forwarded-host"))
+        .and(warp::header("x-forwarded-port"))
+        .and(warp::header("x-forwarded-uri"))
+        .and_then(|proto: String, host: String, port: String, uri: String| {
+            std::future::ready(Ok::<_, Rejection>(format!("{}://{}:{}{}", proto, host, port, uri)))
+        })
+}
 #[tokio::main]
 async fn main() {
     setup_logging();
@@ -56,7 +65,7 @@ async fn main() {
         })
         .and_then(validate_credentials)
         .map(|user: User| response::make_valid_response(&user.user_id));
-    let auth_route = warp::header::<String>("X-Forwarded-Uri")
+    let auth_route = get_original_request_url()
         .and(auth_header_exists().and_then(validate_credentials))
         .and(cookie_jar())
         .map(|original_url: String, user: User, mut jar: CookieJar| {
