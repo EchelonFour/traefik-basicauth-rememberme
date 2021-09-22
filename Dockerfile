@@ -8,3 +8,4 @@ RUN DEBIAN_FRONTEND="noninteractive" apt-get update && apt-get install -y dumb-i
 COPY --from=builder /usr/local/cargo/bin/traefik-basicauth-rememberme /usr/local/bin/traefik-basicauth-rememberme
 ENTRYPOINT ["/usr/bin/dumb-init", "--"]
 CMD ["traefik-basicauth-rememberme"]
+EXPOSE 80

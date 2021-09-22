@@ -51,7 +51,7 @@ impl Default for AppConfig {
             cookie_lifetime: CookieLifetime::Permanent,
             htpasswd_path: ".htpasswd".to_string(),
             user_header: "x-user".to_string(),
-            listen: ([0, 0, 0, 0], 8000).into(),
+            listen: ([0, 0, 0, 0], 80).into(),
             secret: Secret {
                 key: cookie::Key::generate(),
                 default: true,
