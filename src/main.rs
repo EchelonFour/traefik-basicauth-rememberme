@@ -47,20 +47,22 @@ fn setup_logging() {
         .init();
 }
 
-fn get_original_request_url()  -> impl Filter<Extract = (String,), Error = Rejection> + Copy {
+fn get_original_request_url() -> impl Filter<Extract = (String,), Error = Rejection> + Copy {
     warp::header("x-forwarded-proto")
         .and(warp::header("x-forwarded-host"))
         .and(warp::header("x-forwarded-port"))
         .and(warp::header("x-forwarded-uri"))
         .and_then(|proto: String, host: String, port: String, uri: String| {
-            std::future::ready(Ok::<_, Rejection>(format!("{}://{}:{}{}", proto, host, port, uri)))
+            std::future::ready(Ok::<_, Rejection>(format!(
+                "{}://{}:{}{}",
+                proto, host, port, uri
+            )))
         })
 }
-fn is_secure_request()  -> impl Filter<Extract = (bool,), Error = Rejection> + Copy {
-    warp::header("x-forwarded-proto")
-        .and_then(|proto: String| {
-            std::future::ready(Ok::<_, Rejection>(proto == "https"))
-        })
+fn is_secure_request() -> impl Filter<Extract = (bool,), Error = Rejection> + Copy {
+    warp::header::optional("x-forwarded-proto").and_then(|proto: Option<String>| {
+        std::future::ready(Ok::<_, Rejection>(proto == Some("https".to_string())))
+    })
 }
 #[tokio::main]
 async fn main() {
@@ -75,19 +77,32 @@ async fn main() {
         .and(auth_header_exists().and_then(validate_credentials))
         .and(cookie_jar())
         .and(is_secure_request())
-        .map(|original_url: String, user: User, mut jar: CookieJar, is_secure: bool| {
-            let mut private_jar = jar.private_mut();
-            let mut cookie: Cookie = user.into();
-            cookie.set_secure(is_secure);
-            private_jar.add(cookie);
-            response::make_cookie_response(&original_url, jar.delta())
-        });
-    let unauthorised = cookie_jar().and(is_secure_request()).map(|mut jar: CookieJar, is_secure: bool| {
-        if None != jar.get(&CONFIG.cookie_name) {
-            jar.remove(make_auth_cookie("", is_secure));
-        }
-        response::make_challenge_response(Some(jar.delta()))
-    });
+        .and(warp::header::optional("x-forwarded-host"))
+        .map(
+            |original_url: String,
+             user: User,
+             mut jar: CookieJar,
+             is_secure: bool,
+             host: Option<String>| {
+                let mut private_jar = jar.private_mut();
+                let mut cookie: Cookie =
+                    make_auth_cookie(user.into_cookie_contents(), is_secure, host);
+                cookie.set_secure(is_secure);
+                private_jar.add(cookie);
+                response::make_cookie_response(&original_url, jar.delta())
+            },
+        );
+    let unauthorised = cookie_jar()
+        .and(is_secure_request())
+        .and(warp::header::optional("x-forwarded-host"))
+        .map(
+            |mut jar: CookieJar, is_secure: bool, host: Option<String>| {
+                if None != jar.get(&CONFIG.cookie_name) {
+                    jar.remove(make_auth_cookie("", is_secure, host));
+                }
+                response::make_challenge_response(Some(jar.delta()))
+            },
+        );
 
     warp::serve(
         cookie_route
@@ -111,12 +126,12 @@ async fn main() {
                     version = ?info.version(),
                     referer = Empty,
                 );
-        
+
                 // Record optional fields.
                 if let Some(remote_addr) = info.remote_addr() {
                     span.record("remote.addr", &display(remote_addr));
                 }
-        
+
                 if let Some(referer) = info.referer() {
                     span.record("referer", &display(referer));
                 }

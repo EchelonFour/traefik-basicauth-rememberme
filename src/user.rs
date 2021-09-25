@@ -1,4 +1,3 @@
-use crate::cookie::make_auth_cookie;
 use cookie::Cookie;
 use http_auth_basic::Credentials;
 use std::convert::TryFrom;
@@ -7,6 +6,13 @@ pub struct User {
     pub user_id: String,
     pub password: String,
 }
+
+impl User {
+    pub fn into_cookie_contents(self) -> String {
+        format!("{}:{}", self.user_id, self.password)
+    }
+}
+
 impl<'c> TryFrom<Cookie<'c>> for User {
     type Error = &'static str;
     fn try_from(cookie: Cookie<'c>) -> Result<Self, Self::Error> {
@@ -18,12 +24,6 @@ impl<'c> TryFrom<Cookie<'c>> for User {
             user_id: user_id.to_string(),
             password: password.to_string(),
         })
-    }
-}
-
-impl<'c> From<User> for Cookie<'c> {
-    fn from(user: User) -> Self {
-        make_auth_cookie(format!("{}:{}", user.user_id, user.password), false)
     }
 }
 

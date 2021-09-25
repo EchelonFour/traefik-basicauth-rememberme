@@ -53,7 +53,11 @@ pub fn has_decrypted_cookie(
     })
 }
 
-pub fn make_auth_cookie<'c, V: Into<Cow<'c, str>>>(value: V, is_secure: bool) -> Cookie<'c> {
+pub fn make_auth_cookie<'c, V: Into<Cow<'c, str>>>(
+    value: V,
+    is_secure: bool,
+    host: Option<String>,
+) -> Cookie<'c> {
     let mut builder = Cookie::build(CONFIG.cookie_name.to_owned(), value)
         .http_only(true)
         .secure(is_secure);
@@ -63,7 +67,13 @@ pub fn make_auth_cookie<'c, V: Into<Cow<'c, str>>>(value: V, is_secure: bool) ->
         CookieLifetime::Limited(duration) => builder.max_age(duration.to_owned()),
     };
     if let Some(cookie_domain) = &CONFIG.cookie_domain {
-        builder = builder.domain(cookie_domain.to_owned());
+        if let Some(host) = host {
+            if cookie_domain.ends_with(&host) {
+                builder = builder.domain(cookie_domain.to_owned());
+            }
+        } else {
+            builder = builder.domain(cookie_domain.to_owned());
+        }
     }
     builder.finish()
 }
