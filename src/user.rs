@@ -1,3 +1,4 @@
+use crate::CONFIG;
 use cookie::Cookie;
 use http_auth_basic::Credentials;
 use std::convert::TryFrom;
@@ -5,6 +6,7 @@ use std::convert::TryFrom;
 pub struct User {
     pub user_id: String,
     pub password: String,
+    pub no_save: bool,
 }
 
 impl User {
@@ -23,15 +25,25 @@ impl<'c> TryFrom<Cookie<'c>> for User {
         Ok(User {
             user_id: user_id.to_string(),
             password: password.to_string(),
+            no_save: false,
         })
     }
 }
 
 impl From<Credentials> for User {
     fn from(credentials: Credentials) -> Self {
+        let mut no_save = false;
+        let mut user_id = credentials.user_id.to_owned();
+        if CONFIG.no_save_enabled {
+            if let Some(real_user_id) = credentials.user_id.strip_suffix("-nosave") {
+                no_save = true;
+                user_id = real_user_id.to_string();
+            }
+        }
         User {
-            user_id: credentials.user_id,
+            user_id,
             password: credentials.password,
+            no_save,
         }
     }
 }

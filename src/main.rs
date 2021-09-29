@@ -84,12 +84,16 @@ async fn main() {
              mut jar: CookieJar,
              is_secure: bool,
              host: Option<String>| {
-                let mut private_jar = jar.private_mut();
-                let mut cookie: Cookie =
-                    make_auth_cookie(user.into_cookie_contents(), is_secure, host);
-                cookie.set_secure(is_secure);
-                private_jar.add(cookie);
-                response::make_cookie_response(&original_url, jar.delta())
+                if user.no_save {
+                    response::make_valid_response(&user.user_id)
+                } else {
+                    let mut private_jar = jar.private_mut();
+                    let mut cookie: Cookie =
+                        make_auth_cookie(user.into_cookie_contents(), is_secure, host);
+                    cookie.set_secure(is_secure);
+                    private_jar.add(cookie);
+                    response::make_cookie_response(&original_url, jar.delta())
+                }
             },
         );
     let unauthorised = cookie_jar()

@@ -37,6 +37,7 @@ pub struct AppConfig {
     pub listen: SocketAddr,
     pub secret: Secret,
     pub htpasswd_contents: Option<String>,
+    pub no_save_enabled: bool,
     #[serde(skip)]
     #[derivative(Debug = "ignore")]
     pub htpasswd: Htpasswd,
@@ -57,6 +58,7 @@ impl Default for AppConfig {
                 default: true,
             },
             htpasswd_contents: None,
+            no_save_enabled: true,
             htpasswd: Htpasswd::new(""),
         }
     }
@@ -85,7 +87,10 @@ impl AppConfig {
                 htpasswd_contents.to_owned().replace(",", "\n")
             } else {
                 std::fs::read_to_string(&parsed_config.htpasswd_path).map_err(|io_error| {
-                    ConfigError::Message(format!("failed to read htpasswd file {}. {}", &parsed_config.htpasswd_path, io_error))
+                    ConfigError::Message(format!(
+                        "failed to read htpasswd file {}. {}",
+                        &parsed_config.htpasswd_path, io_error
+                    ))
                 })?
             },
         );
