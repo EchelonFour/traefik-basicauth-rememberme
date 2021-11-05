@@ -9,3 +9,4 @@ COPY --from=builder /usr/local/cargo/bin/traefik-basicauth-rememberme /usr/local
 ENTRYPOINT ["/usr/bin/dumb-init", "--"]
 CMD ["traefik-basicauth-rememberme"]
 EXPOSE 80
+ENV RUN_MODE=production
