@@ -10,7 +10,8 @@ This is a very simple web server designed to respond to the [ForwardAuth](https:
 
 - Basic Authentication valid
 - Cookie Authentication valid
-  When the Basic authentication passes, it sets a cookie so that later requests pass the Cookie authentication.
+
+When the Basic authentication passes, it sets a cookie so that later requests pass the Cookie authentication.
 
 ## Install
 
