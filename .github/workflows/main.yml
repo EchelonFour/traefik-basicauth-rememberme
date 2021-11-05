@@ -50,4 +50,4 @@ jobs:
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          platforms: linux/amd64${{ github.event_name == 'tag' && ',linux/arm64' || '' }}
+          platforms: linux/amd64${{ github.event_name == 'push' && startsWith(github.ref, 'refs/tags/') && ',linux/arm64' || '' }} # include arm on tag
