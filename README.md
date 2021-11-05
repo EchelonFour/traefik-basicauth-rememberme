@@ -1,4 +1,6 @@
 # traefik-basicauth-rememberme
+[![CI](https://github.com/EchelonFour/traefik-basicauth-rememberme/actions/workflows/main.yml/badge.svg)](https://github.com/EchelonFour/traefik-basicauth-rememberme/actions/workflows/main.yml)
+![GitLab Release](https://img.shields.io/gitlab/v/release/EchelonFour/traefik-basicauth-rememberme)
 
 Acts as a server to handle authentication with traefik's forward auth middleware, where the login is saved in a cookie
 
